@@ -82,7 +82,8 @@ public class Window extends Canvas implements Runnable, MouseListener{
                     mouseClicked(e);
                 }
             }
-
+            gameMind.update();
+            render();
         }
     }
 
@@ -122,7 +123,6 @@ public class Window extends Canvas implements Runnable, MouseListener{
     private StreamsGettable streams;
     private GameTable gameTable;
     private boolean myTurn;
-    private boolean isWaiting;
 
     public Window(GameMind gameMind, StreamsGettable streams) {
         now = state.first;
@@ -130,7 +130,7 @@ public class Window extends Canvas implements Runnable, MouseListener{
         this.gameMind = gameMind;
         gameTable = gameMind.getGameTable();
         myTurn = !gameTable.isBlack();
-        JFrame frame = new JFrame("Checkers");
+        frame = new JFrame("Checkers");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); //выход из приложения по нажатию клавиши ESC
         frame.setLayout(new BorderLayout());
         frame.add(this, BorderLayout.CENTER); //добавляем холст на наш фрейм
@@ -141,30 +141,19 @@ public class Window extends Canvas implements Runnable, MouseListener{
 
     @Override
     public void run() {
+        long lastTime = System.currentTimeMillis();
         prepare();
         gameMind.update();
-        isWaiting = false;
-        Messenger messenger = new Messenger();
+        Thread messageWaitor = new Thread(new Messenger());
         while (!render());
-        while (!gameMind.isGameOver()) {
-            render();
-            if(!myTurn && !isWaiting){
-                new Thread(messenger).start();//++
+        while (true) {
+            if(!myTurn && !messageWaitor.isAlive()){
+                messageWaitor = new Thread(new Messenger());
+                messageWaitor.start();
             }
-            gameMind.update();
-        }
-        Message lastMes;
-        if(gameTable.isBlack()){
-            lastMes = new Message(new Pos(-1 , 1), null,null, false);
-        }
-        else {
-            lastMes = new Message(new Pos(-1 , -1), null,null, false);
-        }
-        try {
-            streams.getOutputStream().writeObject(lastMes);
-            gameTable.makeAMove(lastMes);
-        } catch (IOException e) {
-            MAIN.LOGGER.writeAsError("Can't send final message");
+            if(System.currentTimeMillis() - lastTime >= 500){
+                render();
+            }
         }
     }
 
@@ -187,7 +176,6 @@ public class Window extends Canvas implements Runnable, MouseListener{
         boolean flag;
         if(bs == null){
             createBufferStrategy(2);
-            requestFocus();
             flag = false;
         }
         else {
@@ -254,7 +242,6 @@ public class Window extends Canvas implements Runnable, MouseListener{
         @Override
         public void run() {
             if (!myTurn) {
-                isWaiting = true;
                 Object tmp = null;
                 Message message = null;
                 try {
@@ -267,9 +254,27 @@ public class Window extends Canvas implements Runnable, MouseListener{
                     else {
                         gameTable.makeAMove(message);
                         myTurn = !message.isHaveNextWay();
+                        if(gameMind.isGameOver()) {
+                            Message lastMes;
+                            if (gameTable.isBlack()) {
+                                lastMes = new Message(new Pos(-1, 1), null, null, false);
+                            } else {
+                                lastMes = new Message(new Pos(-1, -1), null, null, false);
+                            }
+                            try {
+                                streams.getOutputStream().writeObject(lastMes);
+                                gameTable.makeAMove(lastMes);
+                            } catch (IOException e) {
+                                MAIN.LOGGER.writeAsError("Can't send final message");
+                            }
+                        }
                     }
                 } catch (ClassNotFoundException e1) {
+                    MAIN.LOGGER.writeAsError("Class not found");
                 } catch (IOException e1) {
+                    MAIN.LOGGER.writeAsError("IO Exception");
+                    JOptionPane.showMessageDialog(null, "Connection error");
+                    System.exit(0);
                 } catch (Exception e1){
                     try {
                         streams.getOutputStream().writeObject(new Message(new Pos(100,100), null, null, false));
@@ -278,8 +283,8 @@ public class Window extends Canvas implements Runnable, MouseListener{
                         e.printStackTrace();
                     }
                 }
+                gameMind.update();
             }
-            isWaiting = false;
         }
     }
 }

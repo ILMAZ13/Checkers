@@ -286,8 +286,11 @@ public class GameMind {
             for(int y = 0; y < 8; y++){
                 if(table[x][y] != null){
                     if(table[x][y].isBlack == gameTable.isBlack()){
-                        if(!possibleWays.get(new Pos(x,y)).isEmpty()){
-                            flag = false;
+                        Set<InfoHolger> temp = possibleWays.get(new Pos(x,y));
+                        if(temp != null) {
+                            if (!possibleWays.get(new Pos(x, y)).isEmpty()) {
+                                flag = false;
+                            }
                         }
                     }
                 }
